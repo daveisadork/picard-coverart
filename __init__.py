@@ -44,8 +44,9 @@ import re
 import os
 import os.path
 import sys
-from tempfile import TemporaryFile
+import StringIO
 from PIL import Image
+from tempfile import TemporaryFile
 
 
 #
@@ -74,6 +75,43 @@ _AMAZON_IMAGE_PATH_SMALL = '/images/P/%s.01.MZZZZZZZ.jpg'
 _AMAZON_IMAGE_PATH2 = '/images/P/%s.02.LZZZZZZZ.jpg'
 _AMAZON_IMAGE_PATH2_SMALL = '/images/P/%s.02.MZZZZZZZ.jpg'
 
+def check_image_size(album, metadata, data):
+    try:
+        dir = '/tmp'
+        img_data = StringIO.StringIO(data)
+        image = Image.open(img_data)
+        # Check to see if the image we're going to embed is larger than
+        # 480px in any dimension. Should probably make this configurable.
+        try:
+            if image.size[0] > 480 or image.size[1] > 480:
+                # Resize the image to a maximum of 480x480 (while
+                # preserving aspect ratio) before embedding it so our
+                # music folder doesn't take up an unnecessarily huge
+                # amount of space.
+                wpercent = (480/float(image.size[0]))
+                hsize = int((float(image.size[1])*float(wpercent)))
+                image = image.resize((480,hsize), Image.ANTIALIAS)
+        finally:
+            image.save(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
+            artwork = open(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
+        filesize = len(artwork.read())
+        qual = 75
+        print 'Quality: ' + str(qual) + ", size: " + str(filesize / 1024.0) + ' bytes'
+        while filesize >= 43008 and qual > 1:
+            artwork = None
+            qual -= 1
+            os.remove(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
+            image.save(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'), 'JPEG', quality=qual)
+            artwork = open(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
+            filesize = len(artwork.read())
+            print 'Quality: ' + str(qual) + ", size: " + str(filesize / 1024.0) + ' bytes'
+        artwork = None
+        artwork = open(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
+        return artwork.read()
+    finally:
+        os.remove(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
+
+
 def _coverart_downloaded(album, metadata, release, try_list, data, http, error):
     try:
         if error or len(data) < 0:
@@ -81,6 +119,7 @@ def _coverart_downloaded(album, metadata, release, try_list, data, http, error):
                 album.log.error(str(http.errorString()))
             coverart(album, metadata, release, try_list)
         else:
+            data = check_image_size(album, metadata, data)
             metadata.add_image("image/jpeg", data)
             for track in album._new_tracks:
                 track.metadata.add_image("image/jpeg", data)
@@ -90,26 +129,18 @@ def _coverart_downloaded(album, metadata, release, try_list, data, http, error):
 
 
 def coverart(album, metadata, release, try_list=None):
-    #if album.config.setting['cover_image_filename']:
+    # Make sure Picard isn't going to overwrite our high quality local cover art
+    # with the resized artwork we create below for embedding.
+    #if not album.config.setting['cover_image_filename']:
         for file in album.iterfiles():
             try:
                 dir = os.path.dirname(file.filename)
+                # TODO: Move this value to a configuration page so the user can
+                # pick the filename(s) he wants us to check for.
                 cover = 'Cover.jpg'
-                img = Image.open(os.path.join(dir, cover))
-                if img.size[0] > 500:
-                    if img.size[1] > 500:
-                        wpercent = (500/float(img.size[0]))
-                        hsize = int((float(img.size[1])*float(wpercent)))
-                        img.resize((500,hsize), Image.ANTIALIAS).save(os.path.join(dir, 'small' + cover))
-                        with open(os.path.join(dir, 'small' + cover)) as artwork:
-                            album._requests += 1
-                            _coverart_downloaded(album, metadata, release, [], artwork.read(), None, None)
-                            os.remove(os.path.join(dir, 'small' + cover))
-                else:
-                    with open(os.path.join(dir, cover)) as artwork:
-                        album._requests += 1
-                        _coverart_downloaded(album, metadata, release, [], artwork.read(), None, None)
-                
+                with open(os.path.join(dir, cover)) as artwork:
+                    album._requests += 1
+                    _coverart_downloaded(album, metadata, release, [], artwork.read(), None, None)
                 return
             except IOError:
 
