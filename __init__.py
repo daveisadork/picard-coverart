@@ -28,7 +28,7 @@ Changelog:
 """
 
 PLUGIN_NAME = 'Cover Art Downloader'
-PLUGIN_AUTHOR = 'Oliver Charles, Philipp Wolfer'
+PLUGIN_AUTHOR = 'Dave Hayes, Oliver Charles, Philipp Wolfer'
 PLUGIN_DESCRIPTION = '''Downloads cover artwork for releases that have a
 CoverArtLink.'''
 PLUGIN_VERSION = "0.4"
