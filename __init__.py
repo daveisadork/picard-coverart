@@ -80,35 +80,41 @@ def check_image_size(album, metadata, data):
         dir = '/tmp'
         img_data = StringIO.StringIO(data)
         image = Image.open(img_data)
+        is_ogg = False
+        for file in album.iterfiles():
+            (shortname, extension) = os.path.splitext(file.filename)
+            if extension == '.ogg':
+                is_ogg = True
         # Check to see if the image we're going to embed is larger than
-        # 480px in any dimension. Should probably make this configurable.
+        # 500px in any dimension. Should probably make this configurable.
         try:
-            if image.size[0] > 480 or image.size[1] > 480:
-                # Resize the image to a maximum of 480x480 (while
+            if image.size[0] > 500 or image.size[1] > 500:
+                # Resize the image to a maximum of 500x500 (while
                 # preserving aspect ratio) before embedding it so our
                 # music folder doesn't take up an unnecessarily huge
                 # amount of space.
-                wpercent = (480/float(image.size[0]))
+                wpercent = (500/float(image.size[0]))
                 hsize = int((float(image.size[1])*float(wpercent)))
-                image = image.resize((480,hsize), Image.ANTIALIAS)
+                image = image.resize((500,hsize), Image.ANTIALIAS)
         finally:
             image.save(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
             artwork = open(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
         filesize = len(artwork.read())
         qual = 75
-        print 'Quality: ' + str(qual) + ", size: " + str(filesize / 1024.0) + ' bytes'
-        while filesize >= 43008 and qual > 1:
+        while filesize >= 43008 and qual > 1 and is_ogg == True:
+            artwork.close()
             artwork = None
             qual -= 1
             os.remove(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
             image.save(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'), 'JPEG', quality=qual)
             artwork = open(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
             filesize = len(artwork.read())
-            print 'Quality: ' + str(qual) + ", size: " + str(filesize / 1024.0) + ' bytes'
         artwork = None
         artwork = open(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
         return artwork.read()
     finally:
+        artwork.close()
+        img_data.close()
         os.remove(os.path.join(dir, metadata['musicbrainz_albumid'] + '.jpg'))
 
 
